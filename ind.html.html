@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guard Duty Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  body { background: #f0f7ff; font-family: 'Inter', sans-serif; }
+  textarea { resize: none; }
+  input, select, textarea { transition: all 0.3s; }
+  input:focus, select:focus, textarea:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.2); outline: none; }
+
+  @media print {
+    body, table, th, td { font-size: 16pt; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid black; padding: 8px; }
+    button, input, select, textarea, .chart-container { display: none; }
+  }
+</style>
+</head>
+<body class="min-h-screen p-6">
+
+<div class="max-w-7xl mx-auto space-y-8">
+
+  <!-- Header -->
+  <header class="text-center mb-6">
+    <h1 class="text-4xl font-extrabold text-blue-700">Supara Company Limited</h1>
+    <p class="text-2xl font-semibold mt-1 text-gray-700">Guard Duty Dashboard</p>
+  </header>
+
+  <!-- Charts -->
+  <section class="grid md:grid-cols-2 gap-6">
+    <div class="bg-white rounded-3xl shadow-xl p-6 border border-gray-200">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">จำนวนเหตุการณ์ตามรปภ.</h2>
+      <canvas id="guardChart" class="chart-container"></canvas>
+    </div>
+    <div class="bg-white rounded-3xl shadow-xl p-6 border border-gray-200">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">จำนวนเหตุการณ์ตามสถานที่</h2>
+      <canvas id="locationChart" class="chart-container"></canvas>
+    </div>
+  </section>
+
+  <!-- Form -->
+  <section class="bg-white rounded-3xl shadow-xl p-6 border border-gray-200 mt-6">
+    <h2 class="text-xl font-semibold text-gray-800 mb-4">กรอกข้อมูลการตรวจ</h2>
+    <div class="grid md:grid-cols-3 gap-4 mb-6">
+      <div class="flex flex-col">
+        <label class="font-medium text-gray-700">วันที่</label>
+        <input type="date" id="date" class="mt-1 rounded-xl border border-gray-300 p-3 shadow-sm">
+      </div>
+      <div class="flex flex-col">
+        <label class="font-medium text-gray-700">สถานที่ตรวจ</label>
+        <select id="location" class="mt-1 rounded-xl border border-gray-300 p-3 shadow-sm">
+          <option value="">— เลือกสถานที่ —</option>
+          <option>Main Gate</option>
+          <option>Warehouse A</option>
+          <option>Warehouse B</option>
+          <option>Office Building</option>
+          <option>Parking Lot</option>
+          <option>Perimeter</option>
+        </select>
+      </div>
+      <div class="flex flex-col">
+        <label class="font-medium text-gray-700">รายชื่อ รปภ.</label>
+        <select id="guard" class="mt-1 rounded-xl border border-gray-300 p-3 shadow-sm">
+          <option value="">— เลือกชื่อ —</option>
+          <option>Somchai Prasert</option>
+          <option>Anan Suksan</option>
+          <option>Piyapong Nakrit</option>
+          <option>Wichai S.</option>
+          <option>Kittisak T.</option>
+          <option>Guest/Temporary</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Input Rows Header -->
+    <div class="grid grid-cols-12 gap-3 font-semibold text-gray-700 border-b pb-2 mb-2">
+      <div class="col-span-2">เวลาตรวจ</div>
+      <div class="col-span-3">บันทึกเหตุการณ์</div>
+      <div class="col-span-3">ข้อบกพร่องในการทำงาน</div>
+      <div class="col-span-4">รายละเอียดอื่นๆ</div>
+    </div>
+
+    <!-- Input Rows -->
+    <div id="rows" class="space-y-3"></div>
+
+    <div class="mt-6 flex flex-wrap gap-3">
+      <button id="saveBtn" class="bg-green-600 hover:bg-green-700 px-6 py-2 text-white font-semibold rounded-2xl shadow-md transition">บันทึกข้อมูล</button>
+      <button id="clearBtn" class="bg-gray-200 hover:bg-gray-300 px-6 py-2 font-semibold rounded-2xl transition">เคลียร์ฟอร์ม</button>
+    </div>
+  </section>
+
+  <!-- History -->
+  <section class="bg-white rounded-3xl shadow-xl p-6 border border-gray-200 mt-6">
+    <h2 class="text-xl font-semibold text-gray-800 mb-4">ข้อมูลที่บันทึกทั้งหมด</h2>
+    <div class="flex flex-wrap gap-3 mb-4">
+      <input type="date" id="filterDate" class="rounded-xl border border-gray-300 p-3 shadow-sm">
+      <input type="text" id="search" placeholder="ค้นหา" class="rounded-xl border border-gray-300 p-3 flex-1 shadow-sm">
+      <button id="printBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 font-semibold rounded-2xl shadow-md transition">พิมพ์ข้อมูล</button>
+      <button id="resetFilter" class="bg-gray-200 hover:bg-gray-300 px-6 py-2 font-semibold rounded-2xl transition">ล้างตัวกรอง</button>
+      <button id="exportExcel" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 font-semibold rounded-2xl shadow-md transition">Export Excel</button>
+      <button id="exportPDF" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 font-semibold rounded-2xl shadow-md transition">Export PDF</button>
+    </div>
+    <div id="history" class="space-y-4"></div>
+  </section>
+
+</div>
+
+<script>
+const rowContainer = document.getElementById('rows');
+const historyContainer = document.getElementById('history');
+const STORAGE_KEY = 'guardRecordsSimple';
+
+// สร้าง input 13 แถว
+function createRowInputs() {
+  rowContainer.innerHTML = '';
+  for (let i = 0; i < 13; i++) {
+    const div = document.createElement('div');
+    div.className = 'grid grid-cols-12 gap-3';
+    div.innerHTML = `
+      <input type='time' class='col-span-2 rounded-xl border p-2' placeholder='เวลา'>
+      <textarea class='col-span-3 rounded-xl border p-2 h-20' placeholder='บันทึกเหตุการณ์'></textarea>
+      <textarea class='col-span-3 rounded-xl border p-2 h-20' placeholder='ข้อบกพร่อง'></textarea>
+      <textarea class='col-span-4 rounded-xl border p-2 h-20' placeholder='รายละเอียดอื่นๆ'></textarea>
+    `;
+    rowContainer.appendChild(div);
+  }
+}
+
+// ดึงข้อมูลจาก rows
+function getRowsData() {
+  return Array.from(rowContainer.children).map(div => {
+    const inputs = div.querySelectorAll('input, textarea');
+    return {time: inputs[0].value, event: inputs[1].value, defect: inputs[2].value, other: inputs[3].value};
+  }).filter(r=>r.time||r.event||r.defect||r.other);
+}
+
+// บันทึกข้อมูล
+function saveRecord(){
+  const date = document.getElementById('date').value;
+  const location = document.getElementById('location').value;
+  const guard = document.getElementById('guard').value;
+  const rows = getRowsData();
+  if(!date || !location || !guard || rows.length===0){ alert('กรุณากรอกข้อมูลให้ครบ'); return; }
+  let records = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]');
+  records.push({date, location, guard, rows});
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  createRowInputs();
+  document.getElementById('date').value='';
+  document.getElementById('location').value='';
+  document.getElementById('guard').value='';
+  renderHistory();
+  updateCharts();
+}
+
+// เรียกสร้าง input แถวแรก
+createRowInputs();
+
+// TODO: เพิ่ม renderHistory, updateCharts, exportExcel, exportPDF, print ตามฟีเจอร์เต็ม
+</script>
+
+</body>
+</html>
